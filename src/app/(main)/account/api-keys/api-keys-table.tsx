@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -16,51 +16,72 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {toast} from "sonner";
+import { toast } from "sonner"
+import { formatDate } from "@/lib/format"
 
-// Mock data for API keys
-const mockApiKeys = [
-	{
-		id: "1",
-		name: "Development API Key",
-		scope: "read",
-		lastUsed: "2 hours ago",
-		created: "2023-04-01",
-	},
-	{
-		id: "2",
-		name: "Production API Key",
-		scope: "write",
-		lastUsed: "Just now",
-		created: "2023-03-15",
-	},
-	{
-		id: "3",
-		name: "Testing API Key",
-		scope: "admin",
-		lastUsed: "Never",
-		created: "2023-05-10",
-	},
-]
+interface ApiKey {
+	id: string
+	name: string
+	scope: string
+	lastUsed: string
+	created: string
+}
 
-export function ApiKeysTable() {
-	const [apiKeys, setApiKeys] = useState(mockApiKeys)
-	const [isLoading, setIsLoading] = useState(false)
+export function ApiKeysTable({ refreshTrigger }: { refreshTrigger?: number }) {
+	const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+	const [isLoading, setIsLoading] = useState(true)
 	const [keyToDelete, setKeyToDelete] = useState<string | null>(null)
+	const [isDeleting, setIsDeleting] = useState(false)
+
+	useEffect(() => {
+		fetchApiKeys()
+	}, [refreshTrigger])
+
+	async function fetchApiKeys() {
+		try {
+			setIsLoading(true)
+			const response = await fetch("/api/user/api-keys")
+
+			if (!response.ok) {
+				throw new Error("Failed to fetch API keys")
+			}
+
+			const data = await response.json()
+			setApiKeys(data.apiKeys || [])
+		} catch (error) {
+			console.error("Error fetching API keys:", error)
+			toast.error("Error", {
+				description: "Failed to load API keys. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
+	}
 
 	async function handleRevoke(keyId: string) {
-		setIsLoading(true)
+		try {
+			setIsDeleting(true)
+			const response = await fetch(`/api/user/api-keys?id=${keyId}`, {
+				method: "DELETE",
+			})
 
-		// Simulate API call
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+			if (!response.ok) {
+				throw new Error("Failed to revoke API key")
+			}
 
-		setApiKeys(apiKeys.filter((key) => key.id !== keyId))
-		toast.success("API key revoked",{
-			description: "The API key has been successfully revoked.",
-		})
-
-		setKeyToDelete(null)
-		setIsLoading(false)
+			setApiKeys(apiKeys.filter((key) => key.id !== keyId))
+			toast.success("API key revoked", {
+				description: "The API key has been successfully revoked.",
+			})
+		} catch (error) {
+			console.error("Error revoking API key:", error)
+			toast.error("Error", {
+				description: "Failed to revoke API key. Please try again.",
+			})
+		} finally {
+			setKeyToDelete(null)
+			setIsDeleting(false)
+		}
 	}
 
 	function getScopeBadge(scope: string) {
@@ -88,6 +109,22 @@ export function ApiKeysTable() {
 		}
 	}
 
+	if (isLoading) {
+		return (
+			<Card>
+				<CardHeader>
+					<CardTitle>API Keys</CardTitle>
+					<CardDescription>Loading your API keys...</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<div className="h-40 flex items-center justify-center">
+						<p>Loading API keys...</p>
+					</div>
+				</CardContent>
+			</Card>
+		)
+	}
+
 	return (
 		<Card>
 			<CardHeader>
@@ -113,8 +150,10 @@ export function ApiKeysTable() {
 								<TableRow key={key.id}>
 									<TableCell className="font-medium">{key.name}</TableCell>
 									<TableCell>{getScopeBadge(key.scope)}</TableCell>
-									<TableCell>{key.created}</TableCell>
-									<TableCell>{key.lastUsed}</TableCell>
+									<TableCell>{formatDate(new Date(key.created), "MMM d, yyyy")}</TableCell>
+									<TableCell>
+										{key.lastUsed === "Never" ? "Never" : formatDate(new Date(key.lastUsed), "relative")}
+									</TableCell>
 									<TableCell className="text-right">
 										<AlertDialog open={keyToDelete === key.id} onOpenChange={(open) => !open && setKeyToDelete(null)}>
 											<AlertDialogTrigger asChild>
@@ -140,9 +179,9 @@ export function ApiKeysTable() {
 													<AlertDialogAction
 														className="bg-red-500 hover:bg-red-600"
 														onClick={() => handleRevoke(key.id)}
-														disabled={isLoading}
+														disabled={isDeleting}
 													>
-														{isLoading ? "Revoking..." : "Revoke Key"}
+														{isDeleting ? "Revoking..." : "Revoke Key"}
 													</AlertDialogAction>
 												</AlertDialogFooter>
 											</AlertDialogContent>

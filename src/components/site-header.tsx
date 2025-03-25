@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { signOut, useSession } from "next-auth/react"
-import {LayoutDashboard, BarChart, Settings, LogOut, User, CreditCard, Menu, X, HelpCircle} from "lucide-react"
-import { useState } from "react"
+import {usePathname} from "next/navigation"
+import {signOut, useSession} from "next-auth/react"
+import {CreditCard, HelpCircle, LayoutDashboard, LogOut, Menu, RocketIcon, User, X} from "lucide-react"
+import {useState} from "react"
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import {cn} from "@/lib/utils"
+import {Button} from "@/components/ui/button"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -16,7 +16,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ThemeToggle } from "@/components/theme-toggle"
+import {ThemeToggle} from "@/components/theme-toggle"
+import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 
 const mainNavItems = [
 	{title: "Dashboard", href: "/dashboard", icon: LayoutDashboard},
@@ -29,12 +30,20 @@ export function SiteHeader() {
 	const pathname = usePathname()
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+	function getInitials(name: string) {
+		return name
+			.split(" ")
+			.map((n) => n[0])
+			.join("")
+			.toUpperCase()
+	}
+
 	return (
 		<header className="sticky top-0 z-40 w-full border-b bg-background">
 			<div className="container flex h-14 items-center">
 				<div className="mr-4 flex">
 					<Link href="/" className="mr-6 flex items-center space-x-2">
-						<span className="font-bold">Gravity</span>
+						<RocketIcon /><span className="font-bold">Houston</span>
 					</Link>
 
 					{/* Mobile menu button */}
@@ -119,9 +128,10 @@ export function SiteHeader() {
 								<DropdownMenuTrigger asChild>
 									<Button variant="ghost" className="relative h-8 w-8 rounded-full">
 										<span className="sr-only">Open user menu</span>
-										<div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-											{session.user.name?.[0] || session.user.email?.[0] || "U"}
-										</div>
+										<Avatar className="h-8 w-8">
+											<AvatarImage src={session.user.image || ""} alt={session.user.name || "User"} />
+											<AvatarFallback className="text-lg">{session.user.name ? getInitials(session.user.name) : "U"}</AvatarFallback>
+										</Avatar>
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
@@ -150,7 +160,7 @@ export function SiteHeader() {
 										onSelect={(event) => {
 											event.preventDefault()
 											signOut({
-												callbackUrl: `${window.location.origin}/login`,
+												callbackUrl: `${window.location.origin}/`,
 											})
 										}}
 									>
@@ -160,7 +170,7 @@ export function SiteHeader() {
 								</DropdownMenuContent>
 							</DropdownMenu>
 						) : (
-							<Link href="/login">
+							<Link href="/signin">
 								<Button variant="secondary" size="sm">
 									Login
 								</Button>

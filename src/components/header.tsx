@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import {Menu, RocketIcon} from "lucide-react";
-import {MobileNav} from "@/components/mobile-nav";
 import {Button} from "@/components/ui/button";
 import {ThemeToggle} from "@/components/theme-toggle";
 import {Session} from "next-auth";
 import {usePathname} from "next/navigation";
 import {Sheet, SheetContent, SheetTrigger} from "@/components/ui/sheet";
 import {signOut} from "next-auth/react";
-import {cn} from "@/lib/utils";
 
 export function Header({session}: {session: Session | null}) {
 	const pathname = usePathname();

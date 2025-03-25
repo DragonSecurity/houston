@@ -1,15 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {toast} from "sonner";
+import { toast } from "sonner"
 
 export function NotificationsForm() {
 	const [isLoading, setIsLoading] = useState(false)
+	const [isInitialized, setIsInitialized] = useState(false)
 
 	// Email notification preferences
 	const [emailPrefs, setEmailPrefs] = useState({
@@ -29,26 +32,65 @@ export function NotificationsForm() {
 		newsletter: false,
 	})
 
-	async function onSubmit() {
+	// Fetch user notification preferences
+	useEffect(() => {
+		const fetchNotificationPreferences = async () => {
+			try {
+				const response = await fetch("/api/user/notifications")
+				if (response.ok) {
+					const data = await response.json()
+					setEmailPrefs(data.emailPrefs)
+					setPushPrefs(data.pushPrefs)
+				}
+			} catch (error) {
+				console.error("Error fetching notification preferences:", error)
+			} finally {
+				setIsInitialized(true)
+			}
+		}
+
+		fetchNotificationPreferences()
+	}, [])
+
+	async function onSubmit(e: React.FormEvent) {
+		e.preventDefault()
 		setIsLoading(true)
 
-		// Simulate API call
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		try {
+			const response = await fetch("/api/user/notifications", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					emailPrefs,
+					pushPrefs,
+				}),
+			})
 
-		toast.success("Preferences updated",{
-			description: "Your notification preferences have been saved.",
-		})
+			if (!response.ok) {
+				throw new Error("Failed to update notification preferences")
+			}
 
-		setIsLoading(false)
+			toast.success("Preferences updated", {
+				description: "Your notification preferences have been saved.",
+			})
+		} catch (error) {
+			console.error("Error updating notification preferences:", error)
+			toast.error("Error", {
+				description: "Failed to update notification preferences. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
+	}
+
+	if (!isInitialized) {
+		return <div>Loading preferences...</div>
 	}
 
 	return (
-		<form
-			onSubmit={(e) => {
-				e.preventDefault()
-				onSubmit()
-			}}
-		>
+		<form onSubmit={onSubmit}>
 			<Tabs defaultValue="email" className="w-full">
 				<TabsList className="grid w-full grid-cols-2">
 					<TabsTrigger value="email">Email</TabsTrigger>

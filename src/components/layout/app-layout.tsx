@@ -36,6 +36,14 @@ export function AppLayout({ children }: AppLayoutProps) {
 		{ name: "Help", href: "/help", icon: HelpCircle },
 	]
 
+	function getInitials(name: string) {
+		return name
+			.split(" ")
+			.map((n) => n[0])
+			.join("")
+			.toUpperCase()
+	}
+
 	return (
 		<div className="flex h-screen bg-background">
 			{/* Mobile menu */}
@@ -143,8 +151,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 							<DropdownMenuTrigger asChild>
 								<Button variant="ghost" className="relative h-8 w-8 rounded-full">
 									<Avatar className="h-8 w-8">
-										<AvatarImage src={session?.user?.image || undefined} alt={session?.user?.name || "User"} />
-										<AvatarFallback>{session?.user?.name?.charAt(0) || "U"}</AvatarFallback>
+										<AvatarImage src={session?.user.image || ""} alt={session?.user.name || "User"} />
+										<AvatarFallback className="text-lg">{session?.user.name ? getInitials(session.user.name) : "U"}</AvatarFallback>
 									</Avatar>
 								</Button>
 							</DropdownMenuTrigger>

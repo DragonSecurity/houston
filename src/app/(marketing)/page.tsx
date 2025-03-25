@@ -1,17 +1,19 @@
 import Link from "next/link"
 import Image from "next/image"
-import {ArrowDown, DollarSignIcon, RocketIcon, Shield, Star} from "lucide-react"
+import {ArrowDown, DollarSignIcon, Shield} from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { MobileNav } from "@/components/mobile-nav"
+import {Button} from "@/components/ui/button"
 import {Header} from "@/components/header";
 import {Footer} from "@/components/footer";
+import {getServerSession} from "next-auth";
+import {authOptions} from "@/lib/auth";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+	const session = await getServerSession(authOptions)
 	return (
 		<div className="flex min-h-screen flex-col">
 			{/* Navigation */}
-			<Header />
+			<Header session={session}/>
 
 			{/* Hero Section */}
 			<section className="bg-[#1e2738] py-20 text-white">
@@ -23,20 +25,10 @@ export default function LandingPage() {
 						Explain more here, give users a reason to scroll down.
 					</p>
 					<div className="flex flex-col space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0 mt-6">
-						<Button className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-white">SIGN UP</Button>
+						<Button className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-white"><Link href="/signup">Sign Up!</Link></Button>
 						<Button variant="outline" className="h-12 px-8 border-white/20 text-white hover:bg-white/10">
 							TRY DEMO
 						</Button>
-					</div>
-					<div className="mt-8 flex items-center justify-center space-x-1">
-						{Array(5)
-							.fill(null)
-							.map((_, i) => (
-								<Star key={i} className="h-5 w-5 fill-current text-yellow-400" />
-							))}
-						<span className="ml-2 text-sm text-white/80">
-              on <span className="underline">Trustpilot</span>
-            </span>
 					</div>
 				</div>
 			</section>
@@ -46,7 +38,7 @@ export default function LandingPage() {
 				<div className="container flex justify-center">
 					<div className="relative w-full max-w-4xl overflow-hidden rounded-t-lg">
 						<Image
-							src="/placeholder.svg?height=600&width=1200"
+							src="/preview.png?height=600&width=1200"
 							alt="App Screenshot"
 							width={1200}
 							height={600}

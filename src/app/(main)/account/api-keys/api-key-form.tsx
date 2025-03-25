@@ -17,7 +17,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog"
-import {toast} from "sonner";
+import { toast } from "sonner"
 
 const apiKeyFormSchema = z.object({
 	name: z.string().min(1, "Name is required"),
@@ -26,7 +26,7 @@ const apiKeyFormSchema = z.object({
 
 type ApiKeyFormValues = z.infer<typeof apiKeyFormSchema>
 
-export function ApiKeyForm() {
+export function ApiKeyForm({ onApiKeyCreated }: { onApiKeyCreated: () => void }) {
 	const [isLoading, setIsLoading] = useState(false)
 	const [showKeyDialog, setShowKeyDialog] = useState(false)
 	const [generatedKey, setGeneratedKey] = useState("")
@@ -42,21 +42,38 @@ export function ApiKeyForm() {
 	async function onSubmit(data: ApiKeyFormValues) {
 		setIsLoading(true)
 
-		// Simulate API call
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		try {
+			const response = await fetch("/api/user/api-keys", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(data),
+			})
 
-		// Generate a mock API key
-		const mockApiKey = `sk_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`
-		setGeneratedKey(mockApiKey)
-		setShowKeyDialog(true)
+			if (!response.ok) {
+				const errorData = await response.json()
+				throw new Error(errorData.error || "Failed to create API key")
+			}
 
-		form.reset()
-		setIsLoading(false)
+			const responseData = await response.json()
+			setGeneratedKey(responseData.key)
+			setShowKeyDialog(true)
+			form.reset()
+			onApiKeyCreated()
+		} catch (error) {
+			console.error("Error creating API key:", error)
+			toast.error("Error", {
+				description: error instanceof Error ? error.message : "Failed to create API key. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
 	}
 
 	function handleCopyKey() {
 		navigator.clipboard.writeText(generatedKey)
-		toast.success("API key copied",{
+		toast.success("API key copied", {
 			description: "The API key has been copied to your clipboard.",
 		})
 	}

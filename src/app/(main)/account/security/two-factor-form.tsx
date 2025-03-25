@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
@@ -14,28 +14,63 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import {toast} from "sonner";
+import { toast } from "sonner"
+import { QRCodeSVG } from "qrcode.react"
 
 export function TwoFactorForm() {
 	const [isLoading, setIsLoading] = useState(false)
 	const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
 	const [showSetupDialog, setShowSetupDialog] = useState(false)
 	const [verificationCode, setVerificationCode] = useState("")
+	const [setupData, setSetupData] = useState<{ secret: string; otpauth: string } | null>(null)
+	const [backupCodes, setBackupCodes] = useState<string[]>([])
+	const [showBackupCodes, setShowBackupCodes] = useState(false)
+
+	// Fetch 2FA status on component mount
+	useEffect(() => {
+		const fetch2FAStatus = async () => {
+			try {
+				const response = await fetch("/api/user/security/two-factor")
+				if (response.ok) {
+					const data = await response.json()
+					setTwoFactorEnabled(data.enabled || false)
+				}
+			} catch (error) {
+				console.error("Error fetching 2FA status:", error)
+			}
+		}
+
+		fetch2FAStatus()
+	}, [])
 
 	async function handleToggle(checked: boolean) {
 		if (checked) {
-			setShowSetupDialog(true)
+			await startSetup()
 		} else {
-			setIsLoading(true)
+			await disable2FA()
+		}
+	}
 
-			// Simulate API call
-			await new Promise((resolve) => setTimeout(resolve, 1000))
-
-			setTwoFactorEnabled(false)
-			toast.success("Two-factor authentication disabled",{
-				description: "Two-factor authentication has been disabled for your account.",
+	async function startSetup() {
+		setIsLoading(true)
+		try {
+			const response = await fetch("/api/user/security/two-factor", {
+				method: "PUT",
 			})
 
+			if (!response.ok) {
+				throw new Error("Failed to start 2FA setup")
+			}
+
+			const data = await response.json()
+			setSetupData(data)
+			setShowSetupDialog(true)
+		} catch (error) {
+			console.error("Error starting 2FA setup:", error)
+			toast.error("Error", {
+				description: "Failed to start 2FA setup. Please try again.",
+			})
+		} finally {
 			setIsLoading(false)
 		}
 	}
@@ -43,16 +78,78 @@ export function TwoFactorForm() {
 	async function setupTwoFactor() {
 		setIsLoading(true)
 
-		// Simulate API call
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		try {
+			const response = await fetch("/api/user/security/two-factor", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					code: verificationCode,
+				}),
+			})
 
-		setTwoFactorEnabled(true)
-		setShowSetupDialog(false)
-		toast.success("Two-factor authentication enabled",{
-			description: "Two-factor authentication has been enabled for your account.",
+			if (!response.ok) {
+				const data = await response.json()
+				throw new Error(data.error || "Failed to verify code")
+			}
+
+			const data = await response.json()
+			setTwoFactorEnabled(true)
+			setShowSetupDialog(false)
+			setBackupCodes(data.backupCodes || [])
+			setShowBackupCodes(true)
+
+			toast.success("Two-factor authentication enabled", {
+				description: "Two-factor authentication has been enabled for your account.",
+			})
+		} catch (error) {
+			console.error("Error enabling 2FA:", error)
+			toast.error("Error", {
+				description: error instanceof Error ? error.message : "Failed to verify code. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
+	}
+
+	async function disable2FA() {
+		setIsLoading(true)
+
+		try {
+			const response = await fetch("/api/user/security/two-factor", {
+				method: "DELETE",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					confirm: true,
+				}),
+			})
+
+			if (!response.ok) {
+				throw new Error("Failed to disable 2FA")
+			}
+
+			setTwoFactorEnabled(false)
+			toast.success("Two-factor authentication disabled", {
+				description: "Two-factor authentication has been disabled for your account.",
+			})
+		} catch (error) {
+			console.error("Error disabling 2FA:", error)
+			toast.error("Error", {
+				description: "Failed to disable 2FA. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
+	}
+
+	function copyBackupCodes() {
+		navigator.clipboard.writeText(backupCodes.join("\n"))
+		toast.success("Backup codes copied", {
+			description: "Backup codes have been copied to your clipboard.",
 		})
-
-		setIsLoading(false)
 	}
 
 	return (
@@ -77,13 +174,14 @@ export function TwoFactorForm() {
 				</CardContent>
 				{twoFactorEnabled && (
 					<CardFooter>
-						<Button variant="outline" onClick={() => setShowSetupDialog(true)}>
-							Configure authenticator app
+						<Button variant="outline" onClick={() => startSetup()}>
+							Reconfigure authenticator app
 						</Button>
 					</CardFooter>
 				)}
 			</Card>
 
+			{/* Setup Dialog */}
 			<Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
 				<DialogContent>
 					<DialogHeader>
@@ -94,17 +192,18 @@ export function TwoFactorForm() {
 					</DialogHeader>
 
 					<div className="flex flex-col items-center space-y-4">
-						<div className="border border-border p-4 rounded-lg">
-							{/* Placeholder for QR code */}
-							<div className="w-48 h-48 bg-muted flex items-center justify-center">
-								<span className="text-xs text-muted-foreground">QR Code Placeholder</span>
+						{setupData?.otpauth && (
+							<div className="border border-border p-4 rounded-lg">
+								<QRCodeSVG value={setupData.otpauth} size={200} level="H" />
 							</div>
-						</div>
+						)}
 
-						<div className="text-sm text-center">
-							<p className="font-medium">Setup key</p>
-							<p className="font-mono bg-muted p-2 rounded mt-1">ABCD EFGH IJKL MNOP</p>
-						</div>
+						{setupData?.secret && (
+							<div className="text-sm text-center">
+								<p className="font-medium">Setup key</p>
+								<p className="font-mono bg-muted p-2 rounded mt-1">{setupData.secret}</p>
+							</div>
+						)}
 
 						<div className="w-full space-y-2">
 							<Label htmlFor="verification-code">Verification code</Label>
@@ -125,6 +224,34 @@ export function TwoFactorForm() {
 						<Button onClick={setupTwoFactor} disabled={verificationCode.length !== 6 || isLoading}>
 							{isLoading ? "Verifying..." : "Verify"}
 						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* Backup Codes Dialog */}
+			<Dialog open={showBackupCodes} onOpenChange={setShowBackupCodes}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Backup Codes</DialogTitle>
+						<DialogDescription>
+							Save these backup codes in a secure place. You can use them to access your account if you lose your
+							authenticator device.
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="bg-muted p-4 rounded-md font-mono text-sm">
+						{backupCodes.map((code, index) => (
+							<div key={index} className="py-1">
+								{code}
+							</div>
+						))}
+					</div>
+
+					<DialogFooter>
+						<Button variant="outline" onClick={copyBackupCodes}>
+							Copy Codes
+						</Button>
+						<Button onClick={() => setShowBackupCodes(false)}>Done</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

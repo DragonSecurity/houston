@@ -28,7 +28,6 @@ model User {
   bio              String?   @db.Text
   role             UserRole  @default(USER)
   twoFactorEnabled Boolean   @default(false)
-  twoFactorSecret  String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -98,14 +97,21 @@ model PasswordResetToken {
 }
 
 model UserPreferences {
-  id                 String  @id @default(cuid())
-  userId             String  @unique
-  emailNotifications Boolean @default(true)
-  marketingEmails    Boolean @default(true)
-  securityAlerts     Boolean @default(true)
-  productUpdates     Boolean @default(true)
-  theme              String? @default("system")
-  language           String? @default("en")
+  id                      String  @id @default(cuid())
+  userId                  String  @unique
+  emailNotifications      Boolean @default(true)
+  marketingEmails         Boolean @default(true)
+  socialEmails            Boolean @default(true)
+  securityAlerts          Boolean @default(true)
+  newsletterEmails        Boolean @default(true)
+  productUpdates          Boolean @default(true)
+  marketingNotifications  Boolean @default(true)
+  socialNotifications     Boolean @default(true)
+  securityNotifications   Boolean @default(true)
+  updateNotifications     Boolean @default(true)
+  newsletterNotifications Boolean @default(true)
+  theme                   String? @default("system")
+  language                String? @default("en")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -115,6 +121,7 @@ model SecuritySettings {
   userId             String    @unique
   twoFactorEnabled   Boolean   @default(false)
   twoFactorMethod    String? // "app", "sms", "email"
+  twoFactorSecret    String?
   backupCodes        String?   @db.Text // JSON array of backup codes
   lastPasswordChange DateTime?
   passwordHistory    String?   @db.Text // JSON array of previous password hashes

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import {toast} from "sonner";
+import { toast } from "sonner"
 
 const passwordFormSchema = z
 	.object({
@@ -38,15 +38,36 @@ export function SecurityForm() {
 	async function onSubmit(data: PasswordFormValues) {
 		setIsLoading(true)
 
-		// Simulate API call
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		try {
+			const response = await fetch("/api/user/security/password", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					currentPassword: data.currentPassword,
+					newPassword: data.newPassword,
+				}),
+			})
 
-		toast.success("Password updated",{
-			description: "Your password has been updated successfully.",
-		})
+			if (!response.ok) {
+				const errorData = await response.json()
+				throw new Error(errorData.error || "Failed to update password")
+			}
 
-		form.reset()
-		setIsLoading(false)
+			toast.success("Password updated", {
+				description: "Your password has been updated successfully.",
+			})
+
+			form.reset()
+		} catch (error) {
+			console.error("Error changing password:", error)
+			toast.error("Error", {
+				description: error instanceof Error ? error.message : "Failed to update password. Please try again.",
+			})
+		} finally {
+			setIsLoading(false)
+		}
 	}
 
 	return (
