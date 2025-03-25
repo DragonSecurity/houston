@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
 		// Generate reset token
 		const token = crypto.randomBytes(32).toString("hex")
-		const expires = new Date(Date.now() + 1 * 60 * 60 * 1000) // 1 hour
+		const expires = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
 
 		// Store token in database
 		await prisma.passwordResetToken.create({
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 		})
 
 		// Send password reset email
-		await sendPasswordResetEmail({ name: user.name || "User", email: user.email }, token)
+		await sendPasswordResetEmail({ name: user.name || "User", email: email }, token)
 
 		return NextResponse.json({ success: true })
 	} catch (error) {

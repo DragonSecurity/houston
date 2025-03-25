@@ -10,31 +10,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==================== User & Authentication ====================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPPORT
+}
+
 model User {
-  id                  String    @id @default(cuid())
-  name                String?
-  email               String    @unique
-  emailVerified       DateTime?
-  image               String?
-  password            String?
-  permission          String    @default("USER")
-  onboardingCompleted Boolean   @default(false)
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  bio           String?   @db.Text
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  // Subscription fields
-  stripeCustomerId   String?
-  subscriptionId     String?
-  subscriptionStatus String?   @default("inactive")
-  planId             String?   @default("free")
-  billingPeriod      String?   @default("monthly")
-  currentPeriodEnd   DateTime?
-
-  accounts  Account[]
-  sessions  Session[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  // Usage tracking
-  usageItems UsageItem[]
+  // Relations
+  accounts         Account[]
+  sessions         Session[]
+  apiKeys          ApiKey[]
+  subscriptions    Subscription[]
+  teams            TeamMember[]
+  ownedTeams       Team[]            @relation("TeamOwner")
+  preferences      UserPreferences?
+  notifications    Notification[]
+  activities       Activity[]
+  invitations      Invitation[]
+  securitySettings SecuritySettings?
 }
 
 model Account {
@@ -54,6 +61,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -62,14 +70,14 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
-  id         String   @id @default(cuid())
   identifier String
   token      String   @unique
   expires    DateTime
-  createdAt  DateTime @default(now())
 
   @@unique([identifier, token])
 }
@@ -84,37 +92,334 @@ model PasswordResetToken {
   @@index([email])
 }
 
-model Feedback {
-  id        String   @id @default(cuid())
-  content   String
-  type      String?
-  userId    String?
-  createdAt DateTime @default(now())
+model UserPreferences {
+  id                 String  @id @default(cuid())
+  userId             String  @unique
+  emailNotifications Boolean @default(true)
+  marketingEmails    Boolean @default(true)
+  securityAlerts     Boolean @default(true)
+  productUpdates     Boolean @default(true)
+  theme              String? @default("system")
+  language           String? @default("en")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// New models for subscription limits
-model SubscriptionPlan {
-  id                   String   @id
-  name                 String
-  description          String
-  features             Json // Array of features
-  limits               Json // Key-value pairs of limit names and values
-  monthlyPrice         Int // Price in cents
-  annualPrice          Int // Price in cents
-  stripePriceIdMonthly String?
-  stripePriceIdAnnual  String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+model SecuritySettings {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorMethod    String? // "app", "sms", "email"
+  backupCodes        String?   @db.Text // JSON array of backup codes
+  lastPasswordChange DateTime?
+  passwordHistory    String?   @db.Text // JSON array of previous password hashes
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model UsageItem {
+// ==================== API Keys ====================
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  key         String    @unique
+  lastUsed    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  permissions String[] // Array of permissions this key has
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageLogs ApiKeyUsageLog[]
+
+  @@index([userId])
+  @@index([key])
+}
+
+model ApiKeyUsageLog {
   id        String   @id @default(cuid())
+  apiKeyId  String
+  endpoint  String
+  method    String
+  status    Int
+  timestamp DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId])
+  @@index([timestamp])
+}
+
+// ==================== Subscriptions & Billing ====================
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+}
+
+enum SubscriptionInterval {
+  month
+  year
+}
+
+model Plan {
+  id          String               @id @default(cuid())
+  name        String
+  description String?              @db.Text
+  price       Int // In cents
+  interval    SubscriptionInterval @default(month)
+  features    String[] // Array of feature strings
+  isPublic    Boolean              @default(true)
+  sortOrder   Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  // Relations
+  subscriptions Subscription[]
+  limits        PlanLimit?
+}
+
+model PlanLimit {
+  id            String @id @default(cuid())
+  planId        String @unique
+  apiCalls      Int    @default(1000)
+  storage       Int    @default(5) // In GB
+  projects      Int    @default(3)
+  teamMembers   Int    @default(5)
+  customDomains Int    @default(0)
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                   String               @id @default(cuid())
+  userId               String
+  planId               String
+  status               SubscriptionStatus   @default(ACTIVE)
+  interval             SubscriptionInterval @default(month)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean              @default(false)
+  trialEnd             DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan         Plan          @relation(fields: [planId], references: [id])
+  usageRecords UsageRecord[]
+  payments     Payment[]
+  usage        Usage[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+}
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  date           DateTime
+  apiCalls       Int      @default(0)
+  storage        Int      @default(0) // In MB
+  bandwidth      Int      @default(0) // In MB
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, date])
+  @@index([subscriptionId])
+  @@index([date])
+}
+
+model Usage {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  amount         Int      @default(0)
+  apiCalls       Int      @default(0)
+  storage        Int      @default(0) // In MB
+  bandwidth      Int      @default(0) // In MB
+  createdAt      DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([createdAt])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  subscriptionId  String?
+  userId          String?
+  amount          Int // In cents
+  currency        String        @default("USD")
+  status          PaymentStatus @default(PENDING)
+  paymentMethod   String? // "card", "paypal", etc.
+  stripePaymentId String?
+  invoiceUrl      String?
+  receiptUrl      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==================== Teams & Organizations ====================
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  logo        String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  projects    Project[]
+  invitations Invitation[]
+
+  @@index([ownerId])
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemType  String // e.g., "api_calls", "storage", "exports"
-  count     Int      @default(1)
-  metadata  Json? // Additional data about the usage
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  email     String
+  teamId    String
+  role      TeamRole @default(MEMBER)
+  token     String   @unique
+  expires   DateTime
+  inviterId String
   createdAt DateTime @default(now())
 
-  @@index([userId, itemType])
+  // Relations
+  team    Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  inviter User @relation(fields: [inviterId], references: [id])
+
+  @@index([teamId])
+  @@index([email])
+  @@index([token])
+}
+
+// ==================== Projects & Resources ====================
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  teamId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  team Team? @relation(fields: [teamId], references: [id])
+
+  @@index([teamId])
+}
+
+// ==================== Activity & Notifications ====================
+
+enum ActivityType {
+  LOGIN
+  SIGNUP
+  PASSWORD_CHANGE
+  SUBSCRIPTION_CHANGE
+  API_KEY_CREATED
+  API_KEY_DELETED
+  TEAM_CREATED
+  TEAM_JOINED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  userId    String
+  type      ActivityType
+  metadata  Json? // Additional data about the activity
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  SYSTEM
+  PAYMENT
+  SECURITY
+  TEAM
+  MARKETING
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
 }

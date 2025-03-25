@@ -1,25 +1,19 @@
-import type { NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { NextAuthOptions } from "next-auth";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
-import FacebookProvider from "next-auth/providers/facebook";
-import TwitterProvider from "next-auth/providers/twitter";
-import EmailProvider from "next-auth/providers/email";
+import GoogleProvider from "next-auth/providers/google";
+import EmailProvider from "next-auth/providers/email"
+
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcrypt";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: {
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/signin",
-    newUser: "/signup",
-    signOut: "/",
-    error: "/",
-    verifyRequest: "/verify-email",
-  },
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -27,6 +21,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        console.log(credentials)
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
@@ -53,44 +48,52 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
           image: user.image,
+          name: user.name,
+          role: user.role,
         };
       },
-    }),
-    FacebookProvider({
-      clientId: process.env.FACEBOOK_CLIENT_ID || "",
-      clientSecret: process.env.FACEBOOK_CLIENT_SECRET || "",
-    }),
-    TwitterProvider({
-      clientId: process.env.TWITTER_CLIENT_ID || "",
-      clientSecret: process.env.TWITTER_CLIENT_SECRET || "",
-      version: "2.0",
     }),
     EmailProvider({
       server: {
         host: process.env.EMAIL_SERVER_HOST,
-        port: process.env.EMAIL_SERVER_PORT,
+        port: Number(process.env.EMAIL_SERVER_PORT),
         auth: {
           user: process.env.EMAIL_SERVER_USER,
-          pass: process.env.EMAIL_SERVER_PASSWORD,
+          pass: process.env.EMAIL_SERVER_PASSWORD
         },
       },
       from: process.env.EMAIL_FROM,
-    }),
+    })
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        token.sub = user.id;
+        token.email = user.email
+        token.image = user.image
+        token.name = user.name
+        token.role = user.role
       }
       return token;
     },
     async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id;
+      if (token && session.user) {
+        session.user.id = token.sub as string;
+        session.user.email = token.email
+        session.user.image = token.image as string
+        session.user.name = token.name
+        session.user.role = token.role
       }
       return session;
     },
   },
+  session: {
+    strategy: "jwt",
+  },
+  //pages: {
+  //  signIn: "/signin",
+  //},
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
 };

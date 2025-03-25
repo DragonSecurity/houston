@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut, useSession } from "next-auth/react"
-import { LayoutDashboard, BarChart, Settings, LogOut, User, CreditCard, Menu, X } from "lucide-react"
+import {LayoutDashboard, BarChart, Settings, LogOut, User, CreditCard, Menu, X, HelpCircle} from "lucide-react"
 import { useState } from "react"
 
 import { cn } from "@/lib/utils"
@@ -19,21 +19,9 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const mainNavItems = [
-	{
-		title: "Dashboard",
-		href: "/dashboard",
-		icon: LayoutDashboard,
-	},
-	{
-		title: "Analytics",
-		href: "/analytics",
-		icon: BarChart,
-	},
-	{
-		title: "Settings",
-		href: "/settings",
-		icon: Settings,
-	},
+	{title: "Dashboard", href: "/dashboard", icon: LayoutDashboard},
+	{ title: "Account", href: "/account", icon: User },
+	{ title: "Help", href: "/help", icon: HelpCircle },
 ]
 
 export function SiteHeader() {
@@ -46,7 +34,7 @@ export function SiteHeader() {
 			<div className="container flex h-14 items-center">
 				<div className="mr-4 flex">
 					<Link href="/" className="mr-6 flex items-center space-x-2">
-						<span className="font-bold">Houston</span>
+						<span className="font-bold">Gravity</span>
 					</Link>
 
 					{/* Mobile menu button */}
